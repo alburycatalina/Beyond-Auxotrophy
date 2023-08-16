@@ -185,18 +185,63 @@ cal_spike <-
 
 # Get Linear Models for Compounds with Curves -----------------------------
 
-# Cal compounds with non-linear curves: DMSP, GBT, Homarine, Methionine, Proline (are excludeD)
-#NOTE: Make into function and export table of compound slopes and rsq's
-
-lm_calcurve <- function(molecule.name) {
-  molecule.name = "B1"
+# Creat function to make linear models from calibration curves
+lm_calcurve <- function(molecule.name) { # accept parameter molecule.name
   
   
-  B1_curve <- subset(cal_spike, cal_spike$Molecule.Name== "B1")
-  B1_lm <- lm(spike_amount_corr ~ Final_Peak , data = B1_curve)
-  summary(B1_lm)
-  B1_rsq <- as.numeric(summary(B1_lm)$r.squared)
+  assign(paste(molecule.name, "curve", sep = "_"), # create an object named [molecule name]_curve
+         {
+           subset(cal_spike, cal_spike$Molecule.Name == molecule.name)  %>% # grab data for that mol
+             
+             # For Ado and methyl-B12, use only bottom 3 points for this (50 and 100 fmol spikes show the same response)
+             {
+               if (molecule.name == "B12-Ado" | # if b12-ado or me
+                   molecule.name == "B12-Me")
+                 filter(., spike_amount_corr <= 10) # make spike amount less than or equal to 10            
+               else(molecule.name != "B12-Ado" | # if b12-ado or me
+                      molecule.name != "B12-Me")
+                  filter(., spike_amount_corr >= 0)
+             }
+           
+         }, envir = globalenv())
+  
+  
+  
+  assign(paste(molecule.name, "lm", sep = "_"), # create an object named [molecule name]_lm
+         {
+           lm(spike_amount_corr ~ Final_Peak , data = get0(paste(molecule.name, "curve", sep = "_"))) #calculate lm
+         }, envir = globalenv())
+  
+  assign(paste(molecule.name, "rsq", sep = "_"),
+         {
+           as.numeric(summary(get0(paste(molecule.name, "lm", sep = "_")))$r.squared) # get r squared value for fit to line
+         }, envir = globalenv())
+  
 }
+
+# List of compounds to get calibration curves for
+calcurve_molecules <- unique(cal_spike$Molecule.Name)
+
+# Apply calibration to all molecules
+lapply(calcurve_molecules, lm_calcurve)
+
+# Put all calibration data into a df and export
+list_df <- data.frame(mget(ls(pattern = "rsq$"))) %>% # find all df's with rsq in name
+  t() # transpose
+rownames(list_df) <- str_sub(rownames(list_df), 1, str_length(rownames(list_df))-4) # remove rsq from row name to just get molecule name
+list_df <-
+  data.frame(list_df) %>% dplyr::rename("rsq" = "list_df") %>% # change col name
+  mutate(cal = case_when(rsq > .5 ~ "Y",
+                         rsq < .5 ~ "N")) # if rsquared is less than .5, no calibration curve is applied
+write.csv(list_df, "rsq_metab.csv")
+
+
+
+
+
+  
+  
+
 
 #B1
 B1_curve <- subset(cal_spike, cal_spike$Molecule.Name== "B1")
@@ -396,6 +441,7 @@ levels(metab_data_samples_info$B12.Treatment) <- c("+", "-")
                                       
 # Correct Curves and Get Quant --------------------------------------------
 # function for getting r squared and equation onto plot
+# From https://groups.google.com/forum/#!topic/ggplot2/1TgH-kG5XMA
 lm_eqn <- function(df){
   m <- lm(Final_Peak ~ spike_amount_stadd_corr, df);
   eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
