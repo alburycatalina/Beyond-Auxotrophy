@@ -236,7 +236,7 @@ list_df <- data.frame(mget(ls(pattern = "rsq$"))) %>% # find all df's with rsq i
 rownames(list_df) <- str_sub(rownames(list_df), 1, str_length(rownames(list_df))-4) # remove rsq from row name to just get molecule name
 list_df <-
   data.frame(list_df) %>% dplyr::rename("rsq" = "list_df") %>% # change col name
-  mutate(cal = case_when(rsq > .5 ~ "Y",
+  mutate(norm = case_when(rsq > .5 ~ "Y",
                          rsq < .5 ~ "N")) # if rsquared is less than .5, no calibration curve is applied
 
 # write out dataframe with rsq values and if calibration curve used
@@ -332,7 +332,7 @@ metab_data_samples_info <-
 
 
                                       
-# Correct Curves and Get Quant --------------------------------------------
+# Correct Curves --------------------------------------------
 
 # Function for getting r squared and equation onto plot
 # From https://groups.google.com/forum/#!topic/ggplot2/1TgH-kG5XMA
@@ -345,8 +345,9 @@ lm_eqn <- function(df){
   as.character(as.expression(eq));
 }
 
-# Function for generating calibration curve plots and getting quant
-quant_plot_calcurve <- function(molecule.name) {
+# Function for generating calibration curve plots 
+plot_calcurve <- function(molecule.name) {
+  
   
   calcurveplot_df <-
     get0(paste(molecule.name, "curve", sep = "_")) %>% # grab calcurve data
@@ -398,72 +399,78 @@ quant_plot_calcurve <- function(molecule.name) {
            
          }, envir = globalenv())
 
-  
   # Make corrected lm
   assign(paste(molecule.name, "lmcorr", sep = "_"), # create an object named [molecule name]_lmcorr
          {
            lm(spike_amount_stadd_corr ~ Final_Peak , data = calcurveplot_df) #calculate lm
          }, envir = globalenv())
-  
+}
+
+# Apply quant_plot_calcurve function to all analytes
+lapply(calcurve_molecules, plot_calcurve)
+
+
+# Create function for adding LOD/Q
+# Index each LOD/Q per analyte and determine if a tech rep is below it
+incorp_LODQ <- function(molecule.name) {
+
   # Get LOD and LOQ
   LOD <- (LODQ_df %>% filter(Molecule.Name == molecule.name))$LOD
   LOQ <- (LODQ_df %>% filter(Molecule.Name == molecule.name))$LOQ
 
   # Create a dataframe that denotes whether a sample is below LOD or not
   # If sample is below the LOD, make the peak 0
-  assign(paste(molecule.name, "df", sep = "_"),
+  assign(paste(molecule.name, "df", sep = "_"), # make a df called [molecule name]_df
          {
-           metab_data_samples_info %>% filter(Molecule.Name == molecule.name) %>%
-             dplyr::select(Final_Peak) %>%
-             mutate(Below_LOD = case_when(
-               Final_Peak > LOD ~ FALSE,
+           metab_data_samples_info %>% filter(Molecule.Name == molecule.name) %>% # look up molecule
+             mutate(Below_LOD = case_when( # create a column which states whether a tech rep is below the LOD
+               Final_Peak > LOD ~ FALSE, 
                Final_Peak < LOD ~ TRUE
              )) %>%
-             mutate(Final_Peak = case_when(
+             mutate(Final_Peak = case_when( # When a techrep is below LOD, assign as 0
                Final_Peak > LOD ~ Final_Peak,
-               Final_Peak < LOD ~ 0
+               Final_Peak < LOD ~ 0 
              )) %>%
-             mutate(Below_LOQ = case_when(
+             mutate(Below_LOQ = case_when( # create a column which states whether a techrep is below LOQ
                Final_Peak > LOQ ~ FALSE,
                Final_Peak < LOQ ~ TRUE
-             )) %>%
-             mutate(quant = case_when(
-               sum(Below_LOD, na.rm = TRUE) > .5* length(Below_LOD) ~ "no",
-               sum(Below_LOD, na.rm = TRUE) < .5* length(Below_LOD) ~ "relative"
-             ))
+             )) 
              
          }, envir = globalenv())
-  
-  # Get recommended norm type
-  # if >1/2 samples are below LOD, no quant
-  # if <1/2 samples are below LOD, relative quant 
-  # If all samples above LOQ, absolute quant
-  # notify if sample is below LOD
-  B1_df$normtype <- "BMIS_cell"
-  B1_df$normunits <- "fmol_cell"
-  
-  # Predict quant values from lm
-  B1_quant <- data.frame(predict(B1_lmcorr, newdata = B1_df)) 
-  colnames(B1_quant) <- "est_fmol_on_column"
-  B1_df <- cbind(B1_df, B1_quant)
-  
-  # Calculate fmol per mg C, cell, and peak per cell
-  B1_df$fmol_cell <- B1_df$est_fmol_on_column/B1_df$cells_on_column
-  B1_df$fmol_mgC <- B1_df$est_fmol_on_column/B1_df$mgC_loaded
-  B1_df$peak_cell <- B1_df$Final_Peak/B1_df$cells_on_column
-
-  
-
-
-  
-  
-  
-  
   }
 
+# Apply function to all analytes
+lapply(calcurve_molecules, incorp_LODQ) %>% bind_rows()
+
+# list of names of analytes
+metabs_data <- paste(calcurve_molecules, "df", sep = "_")
+metabs_data_cat <- mget(metabs_data)
+
+# Concat all analyte's data into a single dataframe 
+metabs_data_cat <- do.call("rbind", metabs_data_cat)
+
+# Write relative peak dataset
+write.csv(metabs_data_cat, "metabs_data_cat.csv")
 
 
 
+# Get recommended norm type
+# if >1/2 samples are below LOD, no quant
+# if <1/2 samples are below LOD, relative quant 
+# If all samples above LOQ, absolute quant
+# notify if sample is below LOD
+B1_df$normtype <- "BMIS_cell"
+B1_df$normunits <- "fmol_cell"
+
+# Predict quant values from lm
+B1_quant <- data.frame(predict(B1_lmcorr, newdata = B1_df)) 
+colnames(B1_quant) <- "est_fmol_on_column"
+B1_df <- cbind(B1_df, B1_quant)
+
+# Calculate fmol per mg C, cell, and peak per cell
+B1_df$fmol_cell <- B1_df$est_fmol_on_column/B1_df$cells_on_column
+B1_df$fmol_mgC <- B1_df$est_fmol_on_column/B1_df$mgC_loaded
+B1_df$peak_cell <- B1_df$Final_Peak/B1_df$cells_on_column
 
 
 
