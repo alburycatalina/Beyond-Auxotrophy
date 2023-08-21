@@ -13,12 +13,25 @@ setwd("~/Library/CloudStorage/OneDrive-Personal/Documents/Life/School/MSc/1_CHII
 
 
 # load QC data and only include QC treatments
-QC.Data <- read.csv("ER3_149_Frag_Catalina_01_Cal03022022_output.csv") %>% filter( grepl("QC",Replicate.Name))
+QC.Data <-
+  read.csv("ER3_149_Frag_Catalina_01_Cal03022022_output.csv") %>% filter(grepl("QC", Replicate.Name))
 
 
 # Plot QC peaks per compound
-QC.Data$Replicate.Name <- factor(QC.Data$Replicate.Name, levels = c("ER3_149_2fdQC_03", "ER3_149_2fdQC_04" , "ER3_149_2fdQC_08" , "ER3_149_2fdQC_09", "ER3_149_2fdQC_44" , "ER3_149_2fdQC_79" ,
- "ER3_149_2fdQC_114", "ER3_149_2fdQC_142"))
+QC.Data$Replicate.Name <-
+  factor(
+    QC.Data$Replicate.Name,
+    levels = c(
+      "ER3_149_2fdQC_03",
+      "ER3_149_2fdQC_04" ,
+      "ER3_149_2fdQC_08" ,
+      "ER3_149_2fdQC_09",
+      "ER3_149_2fdQC_44" ,
+      "ER3_149_2fdQC_79" ,
+      "ER3_149_2fdQC_114",
+      "ER3_149_2fdQC_142"
+    )
+  )
 
 # Fix DMB name 
 QC.Data <- QC.Data %>% 
@@ -82,7 +95,15 @@ HeavyNormQC.Data.SumStats <- BMIS.Data %>%
 
 
 # Compare CV's per compound and normalization type -------------------------------
-HeavyNormQC.Data.SumStats1 <- HeavyNormQC.Data.SumStats %>% dplyr::select(Molecule.Name, CV.Peak.Area, CV.Peak.Area.B1.Norm, CV.Peak.Area.B2.Norm, CV.Peak.Area.CNB12.Norm, CV.Peak.Area.B7.Norm)
+HeavyNormQC.Data.SumStats1 <-
+  HeavyNormQC.Data.SumStats %>% dplyr::select(
+    Molecule.Name,
+    CV.Peak.Area,
+    CV.Peak.Area.B1.Norm,
+    CV.Peak.Area.B2.Norm,
+    CV.Peak.Area.CNB12.Norm,
+    CV.Peak.Area.B7.Norm
+  )
 
 colnames(HeavyNormQC.Data.SumStats1)[2:6] <- c("No Normalization", "Heavy B1", "Heavy B2", "Heavy CN-B12", "Heavy B7")
 
@@ -135,9 +156,11 @@ HeavyNormQC.Data.BMIS$BMIS_col_name <- paste("Mean.Peak.Area.",HeavyNormQC.Data.
 HeavyNormQC.Data.BMIS.corresp <- HeavyNormQC.Data.BMIS[1:6,]
 
 
-for (i in 1:nrow(HeavyNormQC.Data.BMIS.corresp)){
-  HeavyNormQC.Data.BMIS.corresp$Final.BMIS.Norm.Peak[i] <- HeavyNormQC.Data.BMIS.corresp[i,as.character(HeavyNormQC.Data.BMIS.corresp$BMIS_col_name[i])]
-  HeavyNormQC.Data.BMIS.corresp$BMIS_used[[i]] <- HeavyNormQC.Data.BMIS.corresp$BMIS[i]
+for (i in 1:nrow(HeavyNormQC.Data.BMIS.corresp)) {
+  HeavyNormQC.Data.BMIS.corresp$Final.BMIS.Norm.Peak[i] <-
+    HeavyNormQC.Data.BMIS.corresp[i, as.character(HeavyNormQC.Data.BMIS.corresp$BMIS_col_name[i])]
+  HeavyNormQC.Data.BMIS.corresp$BMIS_used[[i]] <-
+    HeavyNormQC.Data.BMIS.corresp$BMIS[i]
 }
 
 
